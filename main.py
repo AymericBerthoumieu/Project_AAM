@@ -16,9 +16,10 @@ depth_regression = 36
 depth_momentum = 12
 init_level = 100
 test_luck = True
-nb_rd_portfolio = 100  # portfolios to test the null hypothesis of luck
+nb_rd_portfolio = 200  # portfolios to test the null hypothesis of luck
 cvar = 95
 q = 95
+clusters = np.zeros((returns.shape[0]-max(depth_momentum, depth_regression), returns.shape[1]))
 
 # weights of the portfolio
 weights = pd.DataFrame(columns=returns.columns, index=returns.index)
@@ -46,8 +47,9 @@ for i in tqdm(range(max(depth_momentum, depth_regression), len(returns.index))):
     # clustering distance is the correlation between returns
     distance = pdist(returns.iloc[:i + 1, :].T, metric='correlation')
     output = linkage(distance, method='ward')
-    clusters = fcluster(output, nb_clusters, criterion='maxclust')
-    global_momentum_score["cluster"] = clusters
+    clust = fcluster(output, nb_clusters, criterion='maxclust')
+    global_momentum_score["cluster"] = clust
+    clusters[i-max(depth_momentum, depth_regression)] = clust
 
     # PORTFOLIO CONSTRUCTION
     for c in range(nb_clusters):
@@ -97,7 +99,8 @@ if test_luck:
     max_drawdown = list()
     c_var = list()
     for p in range(nb_rd_portfolio):
-        plt.plot(level_luck[p], c="grey", alpha=0.3)
+        plt.plot(level_luck[p], c="grey", alpha=0.2)
+
         stats_luck = utils.Statistics(returns_luck[p], freq=12, rfr=rfr, CVaR_conf=cvar/100).run()
         perf.append(stats_luck["performance"])
         ann_return.append(stats_luck["annualized return"])
@@ -107,12 +110,12 @@ if test_luck:
         c_var.append(stats_luck[f"CVaR ({cvar}%)"])
 
     # Statistics
-    p = np.percentile(perf, q)
-    r = np.percentile(ann_return, q)
-    vol = np.percentile(ann_vol, q)
-    sr = np.percentile(sharpe, q)
-    md = np.percentile(max_drawdown, q)
-    cv = np.percentile(c_var, q)
+    p = f"[{round(np.percentile(perf, (100-q)/2), 2)}, {round(np.percentile(perf, q + (100-q)/2), 2)}]"
+    r = f"[{round(np.percentile(ann_return, (100-q)/2), 2)},{round(np.percentile(ann_return, q + (100-q)/2), 2)}]"
+    vol = f"[{round(np.percentile(ann_vol, (100-q)/2), 2)},{round(np.percentile(ann_vol, q + (100-q)/2), 2)}]"
+    sr = f"[{round(np.percentile(sharpe, (100-q)/2), 2)},{round(np.percentile(sharpe, q + (100-q)/2), 2)}]"
+    md = f"[{round(np.percentile(max_drawdown, (100-q)/2), 2)},{round(np.percentile(max_drawdown, q + (100-q)/2), 2)}]"
+    cv = f"[{round(np.percentile(c_var, (100-q)/2), 2)},{round(np.percentile(c_var, q + (100-q)/2), 2)}]"
 
     print(f"Performance strategy: {stats['performance']}, market: {stats_market['performance']}, luck: {p}")
     print(f"Annualized return strategy: {stats['annualized return']}, market: {stats_market['annualized return']}, luck: {r}")
@@ -121,11 +124,20 @@ if test_luck:
     print(f"Maximum drawdown strategy: {stats['maximum drawdown']['full period']}, market: {stats_market['maximum drawdown']['full period']}, luck: {md}")
     print(f"CVaR strategy: {stats[f'CVaR ({cvar}%)']}, market: {stats_market[f'CVaR ({cvar}%)']}, luck: {cv}")
 
-plt.plot(market_level, label="Eurostoxx 50")
-plt.plot(level_strat, label="Strategy")
-plt.title("Strategy track record")
-plt.xlabel("Dates")
-plt.ylabel("Level")
-plt.legend()
 
-
+# plt.plot(market_level, label="Eurostoxx 50", lw=2)
+# plt.plot(level_strat, label="EU Momentum Volatility Weighted Fund", lw=2)
+# plt.title("EMVW Fund vs Eurostoxx 50")
+# plt.xlabel("Dates")
+# plt.ylabel("Level")
+# plt.legend()
+#
+#
+# vol = utils.volatility(6, returns_strat, np.sqrt(12)).to_frame("EU Momentum Volatility Weighted Fund")
+# vol["Eurostoxx 50"] = utils.volatility(6, market[depth_regression:], np.sqrt(12))
+# plt.plot(vol["Eurostoxx 50"], label="Eurostoxx 50", lw=2)
+# plt.plot(vol["EU Momentum Volatility Weighted Fund"], label="EU Momentum Volatility Weighted Fund", lw=2)
+# plt.title("EMVW Fund vs Eurostoxx 50 6-month rolling volatilities")
+# plt.xlabel("Dates")
+# plt.ylabel("Level")
+# plt.legend()
